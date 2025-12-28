@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Arbeitsbuch</title>
+    
+    <!-- PWA Einstellungen -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Arbeitsbuch">
+    <meta name="theme-color" content="#1d4ed8">
+
+    <!-- Optimiertes Icon (SVG base64 encoded) -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='%231d4ed8'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='350' fill='white'%3E%F0%9F%93%9D%3C/text%3E%3C/svg%3E">
+    <link rel="apple-touch-icon" href="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%231d4ed8'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='350' fill='white'%3E%F0%9F%93%9D%3C/text%3E%3C/svg%3E">
+
+    <!-- Eingebettetes Manifest für Android -->
+    <link rel="manifest" href='data:application/manifest+json,{"name":"Arbeitsbuch","short_name":"Arbeitsbuch","display":"standalone","start_url":".","background_color":"#ffffff","theme_color":"#1d4ed8","icons":[{"src":"data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 512 512%27%3E%3Crect width=%27512%27 height=%27512%27 rx=%27100%27 fill=%27%231d4ed8%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 dominant-baseline=%27middle%27 text-anchor=%27middle%27 font-size=%27350%27 fill=%27white%27%3E%F0%9F%93%9D%3C/text%3E%3C/svg%3E","sizes":"512x512","type":"image/svg+xml"}]}'>
+
+    <!-- Design & Icons -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    
+    <!-- React Framework -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.344.0"
+      }
+    }
+    </script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body { overscroll-behavior-y: contain; }
+        @media print {
+            body { background: white; color: black; }
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            @page { margin: 2cm; size: A4; }
+        }
+        .print-only { display: none; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans select-none">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useRef } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Plus, Trash2, Save, Printer, Clock, DollarSign, MapPin, Briefcase, Calendar, Coffee, AlertCircle, FileDown, X, User, Upload, Download } from 'lucide-react';
+
+        const WorkTracker = () => {
+            const [entries, setEntries] = useState([]);
+            const [isLoaded, setIsLoaded] = useState(false);
+            const [viewMonth, setViewMonth] = useState(new Date().toISOString().slice(0, 7)); 
+            const [isGenerating, setIsGenerating] = useState(false);
+            const [showInstallHint, setShowInstallHint] = useState(true);
+            const [userName, setUserName] = useState("Frank");
+            const fileInputRef = useRef(null);
+
+            const [formData, setFormData] = useState({
+                date: new Date().toISOString().split('T')[0],
+                activity: '',
+                startTime: '07:00',
+                endTime: '17:00',
+                pause: '60', 
+                expenses: '',
+                country: 'Deutschland',
+                manualDuration: ''
+            });
+
+            // Daten laden
+            useEffect(() => {
+                try {
+                    const savedData = localStorage.getItem('frank_data_final');
+                    if (savedData) setEntries(JSON.parse(savedData));
+                    
+                    const savedName = localStorage.getItem('frank_username');
+                    if (savedName) setUserName(savedName);
+                } catch (e) { console.error(e); }
+                setIsLoaded(true);
+
+                const timer = setTimeout(() => setShowInstallHint(false), 8000);
+                return () => clearTimeout(timer);
+            }, []);
+
+            // Daten speichern (lokal)
+            useEffect(() => {
+                if (isLoaded) {
+                    localStorage.setItem('frank_data_final', JSON.stringify(entries));
+                    localStorage.setItem('frank_username', userName);
+                }
+            }, [entries, userName, isLoaded]);
+
+            // --- BACKUP FUNKTIONEN ---
+            const exportData = () => {
+                const dataStr = JSON.stringify(entries, null, 2);
+                const blob = new Blob([dataStr], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = `Backup_Arbeitsbuch_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                alert("Backup-Datei wurde im Download-Ordner gespeichert.");
+            };
+
+            const triggerImport = () => {
+                fileInputRef.current.click();
+            };
+
+            const importData = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const importedEntries = JSON.parse(e.target.result);
+                        if (Array.isArray(importedEntries)) {
+                            if (window.confirm(`Möchtest du ${importedEntries.length} Einträge aus dem Backup wiederherstellen? Dies überschreibt die aktuelle Ansicht.`)) {
+                                setEntries(importedEntries);
+                                alert("Daten erfolgreich wiederhergestellt!");
+                            }
+                        } else {
+                            alert("Ungültiges Dateiformat.");
+                        }
+                    } catch (error) {
+                        alert("Fehler beim Laden der Datei.");
+                    }
+                };
+                reader.readAsText(file);
+                event.target.value = null;
+            };
+
+
+            const calculateDuration = (start, end) => {
+                if (!start || !end) return 0;
+                const d1 = new Date(`2000-01-01T${start}`);
+                const d2 = new Date(`2000-01-01T${end}`);
+                let diffMs = d2 - d1;
+                if (diffMs < 0) diffMs += 24 * 60 * 60 * 1000; 
+                return Math.max(0, diffMs / (1000 * 60 * 60)); 
+            };
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                let hours = 0;
+                if (formData.manualDuration) {
+                    hours = parseFloat(formData.manualDuration.toString().replace(',', '.'));
+                } else {
+                    hours = calculateDuration(formData.startTime, formData.endTime);
+                }
+                
+                const newEntry = {
+                    id: Date.now(),
+                    ...formData,
+                    hours: parseFloat((hours || 0).toFixed(2)),
+                    expenses: parseFloat((formData.expenses || '0').toString().replace(',', '.')) || 0,
+                };
+
+                setEntries(prev => [...prev, newEntry].sort((a, b) => new Date(b.date) - new Date(a.date)));
+                setFormData(prev => ({ ...prev, activity: '', expenses: '', manualDuration: '' }));
+            };
+
+            const deleteEntry = (id) => setEntries(prev => prev.filter(e => e.id !== id));
+
+            // --- BERECHNUNGEN ---
+            const filteredEntries = entries.filter(e => e.date.startsWith(viewMonth));
+            const printEntries = [...filteredEntries].sort((a, b) => new Date(a.date) - new Date(b.date));
+            const totalActualHours = filteredEntries.reduce((sum, e) => sum + (parseFloat(e.hours) || 0), 0);
+            const totalExpenses = filteredEntries.reduce((sum, e) => sum + (parseFloat(e.expenses) || 0), 0);
+            const daysWorked = filteredEntries.length;
+            
+            const flatRateHours = daysWorked * 10;
+            const overtime = totalActualHours - flatRateHours;
+            const monthLabel = new Date(viewMonth + '-01').toLocaleString('de-DE', { month: 'long', year: 'numeric' });
+
+            // --- PDF ---
+            const downloadPDF = async () => {
+                if (isGenerating) return;
+                setIsGenerating(true);
+                await new Promise(r => setTimeout(r, 100));
+
+                try {
+                    if (!window.jspdf) throw new Error("Warte auf PDF Modul...");
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF();
+                    
+                    doc.setFontSize(18);
+                    doc.text(`Arbeitsbericht: ${monthLabel}`, 14, 20);
+                    doc.setFontSize(10);
+                    doc.setTextColor(100);
+                    doc.text(`${userName}'s Arbeitsbuch | Erstellt am ${new Date().toLocaleDateString('de-DE')}`, 14, 26);
+
+                    const tableRows = printEntries.map(e => [
+                        new Date(e.date).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit'}),
+                        e.activity,
+                        e.manualDuration ? 'Manuell' : `${e.startTime}-${e.endTime}`,
+                        "10,00",
+                        e.pause + 'm',
+                        e.expenses > 0 ? e.expenses.toLocaleString('de-DE', {style:'currency', currency:'EUR'}) : '-',
+                        e.country
+                    ]);
+
+                    tableRows.push([
+                        { content: 'GESAMT', colSpan: 3, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } },
+                        { content: flatRateHours.toLocaleString('de-DE') + ' h', styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } },
+                        { content: '', styles: { fillColor: [240, 240, 240] } },
+                        { content: totalExpenses.toLocaleString('de-DE', {style:'currency', currency:'EUR'}), styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } },
+                        { content: '', styles: { fillColor: [240, 240, 240] } }
+                    ]);
+
+                    doc.autoTable({
+                        head: [["Tag", "Tätigkeit", "Zeit", "Std.", "Pause", "Spesen", "Land"]],
+                        body: tableRows,
+                        startY: 35,
+                        theme: 'grid',
+                        headStyles: { fillColor: [29, 78, 216] },
+                        columnStyles: { 0: { cellWidth: 20 }, 3: { halign: 'right' }, 5: { halign: 'right' } }
+                    });
+
+                    const finalY = doc.lastAutoTable.finalY + 10;
+                    doc.setTextColor(0);
+                    const overtimeText = overtime > 0 ? `+${overtime.toLocaleString('de-DE')}` : overtime.toLocaleString('de-DE');
+                    doc.text(`Abrechnung: ${daysWorked} Tage à 10 Stunden = ${flatRateHours} h`, 14, finalY);
+                    doc.text(`Überstunden-Saldo (Realabweichung): ${overtimeText} h`, 14, finalY + 6);
+
+                    const safeName = userName.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g, '_');
+                    doc.save(`Arbeitsbericht_${viewMonth}_${safeName}.pdf`);
+                    alert("PDF gespeichert (Downloads).");
+
+                } catch (e) {
+                    alert("Fehler: " + e.message);
+                } finally {
+                    setIsGenerating(false);
+                }
+            };
+
+            const handlePrint = () => window.print();
+
+            if (!isLoaded) return <div className="p-10 text-center">Lade App...</div>;
+
+            return (
+                <div className="min-h-screen">
+                    <div className="no-print pb-20">
+                        <header className="bg-blue-700 text-white p-4 shadow-md sticky top-0 z-20">
+                            <div className="max-w-3xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
+                                <h1 className="text-xl font-bold flex items-center gap-2">
+                                    <Briefcase size={24} /> Arbeitsbuch
+                                </h1>
+                                <div className="flex items-center gap-2 bg-blue-800/50 px-3 py-1 rounded text-sm">
+                                    <User size={14} className="opacity-70"/>
+                                    <span className="opacity-70">Name:</span>
+                                    <input 
+                                        type="text" 
+                                        value={userName} 
+                                        onChange={(e) => setUserName(e.target.value)}
+                                        className="bg-transparent border-b border-blue-400 focus:border-white outline-none w-24 text-center font-bold"
+                                    />
+                                </div>
+                            </div>
+                        </header>
+
+                        <main className="max-w-3xl mx-auto p-4 space-y-6">
+                            
+                            {showInstallHint && (
+                                <div className="bg-blue-100 border-l-4 border-blue-600 text-blue-900 p-4 rounded-r shadow-lg relative animate-fade-in mb-4">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <p className="font-bold text-sm">Als App installieren:</p>
+                                            <p className="text-xs mt-1">
+                                                Browser-Menü -> "Teilen" oder <strong>⋮</strong> -> <strong>"Zum Startbildschirm"</strong>
+                                            </p>
+                                        </div>
+                                        <button onClick={() => setShowInstallHint(false)} className="text-blue-500 hover:text-blue-700">
+                                            <X size={18} />
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Dashboard */}
+                            <div className="bg-white rounded-xl shadow p-4 border-l-4 border-blue-600">
+                                <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+                                    <h2 className="text-lg font-semibold flex items-center gap-2 text-blue-700">
+                                        <Calendar size={20}/> {monthLabel}
+                                    </h2>
+                                    <input type="month" value={viewMonth} onChange={(e) => setViewMonth(e.target.value)}
+                                    className="bg-slate-100 border-slate-300 rounded p-1 text-sm font-medium" />
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                                    <div className="p-2 bg-slate-50 rounded">
+                                        <div className="text-[10px] text-slate-500 font-bold uppercase">Tage</div>
+                                        <div className="text-xl font-bold">{daysWorked}</div>
+                                    </div>
+                                    <div className="p-2 bg-slate-50 rounded">
+                                        <div className="text-[10px] text-slate-500 font-bold uppercase">Std. (Real)</div>
+                                        <div className="text-xl font-bold">{totalActualHours.toFixed(1)} h</div>
+                                    </div>
+                                    <div className={`p-2 rounded ${overtime >= 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                                        <div className="text-[10px] font-bold uppercase">Überstunden</div>
+                                        <div className="text-xl font-bold">{overtime > 0 ? '+' : ''}{overtime.toFixed(1)}</div>
+                                    </div>
+                                    <div className="p-2 bg-yellow-50 text-yellow-800 rounded">
+                                        <div className="text-[10px] font-bold uppercase">Spesen</div>
+                                        <div className="text-xl font-bold">{totalExpenses.toFixed(2)} €</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Eingabe */}
+                            <div className="bg-white rounded-xl shadow p-5">
+                                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-slate-700">
+                                    <Plus size={20} className="text-blue-600"/> Neuer Eintrag
+                                </h2>
+                                <form onSubmit={handleSubmit} className="space-y-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500">Datum</label>
+                                            <input required type="date" value={formData.date} onChange={e=>setFormData({...formData, date: e.target.value})} className="w-full p-2 border rounded" />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500">Land</label>
+                                            <div className="relative">
+                                                <MapPin size={16} className="absolute left-3 top-3 text-slate-400" />
+                                                <input required type="text" value={formData.country} onChange={e=>setFormData({...formData, country: e.target.value})} className="w-full pl-9 p-2 border rounded" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500">Tätigkeit</label>
+                                        <input required type="text" placeholder="Was gemacht?" value={formData.activity} onChange={e=>setFormData({...formData, activity: e.target.value})} className="w-full p-2 border rounded" />
+                                    </div>
+                                    <div className="bg-slate-50 p-3 rounded border border-slate-200">
+                                        <div className="flex justify-between mb-2">
+                                            <span className="text-xs font-bold text-slate-500">Zeit (Pause extra)</span>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            <input type="time" value={formData.startTime} onChange={e=>setFormData({...formData, startTime:e.target.value})} className="p-2 border rounded text-sm" />
+                                            <input type="time" value={formData.endTime} onChange={e=>setFormData({...formData, endTime:e.target.value})} className="p-2 border rounded text-sm" />
+                                            <div className="relative">
+                                                <input type="number" value={formData.pause} onChange={e=>setFormData({...formData, pause:e.target.value})} className="w-full p-2 border rounded text-sm text-center" />
+                                                <span className="absolute right-1 top-2 text-[10px] text-slate-400">min</span>
+                                            </div>
+                                        </div>
+                                        <div className="mt-2 pt-2 border-t">
+                                             <input type="number" step="0.25" placeholder="Oder Stunden manuell (z.B. 10.5)" value={formData.manualDuration} onChange={e=>setFormData({...formData, manualDuration:e.target.value})} className="w-full p-2 border rounded bg-white text-sm" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500">Spesen (€)</label>
+                                        <div className="relative">
+                                            <DollarSign size={16} className="absolute left-3 top-3 text-slate-400" />
+                                            <input type="number" step="0.01" value={formData.expenses} onChange={e=>setFormData({...formData, expenses:e.target.value})} className="w-full pl-9 p-2 border rounded" />
+                                        </div>
+                                    </div>
+                                    <button type="submit" className="w-full bg-blue-700 text-white font-bold py-3 rounded hover:bg-blue-800 flex justify-center items-center gap-2 active:scale-95 transition-transform">
+                                        <Save size={18} /> Speichern
+                                    </button>
+                                </form>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex justify-between items-end">
+                                <h3 className="font-bold text-slate-700">Einträge</h3>
+                                <div className="flex gap-2">
+                                    {filteredEntries.length > 0 && (
+                                        <>
+                                        <button 
+                                            onClick={handlePrint}
+                                            className="bg-slate-200 hover:bg-slate-300 text-slate-700 py-2 px-3 rounded shadow flex items-center gap-2 text-sm font-bold transition active:scale-95"
+                                        >
+                                            <Printer size={16} /> Drucken
+                                        </button>
+                                        
+                                        <button 
+                                            onClick={downloadPDF}
+                                            disabled={isGenerating}
+                                            className={`
+                                                py-2 px-4 rounded shadow flex items-center gap-2 text-sm font-bold transition text-white active:scale-95
+                                                ${isGenerating ? 'bg-gray-400 cursor-wait' : 'bg-red-600 hover:bg-red-700'}
+                                            `}
+                                        >
+                                            {isGenerating ? 'Erstelle...' : <><FileDown size={16} /> PDF Speichern</>}
+                                        </button>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="space-y-3 pb-8">
+                                {filteredEntries.length === 0 ? (
+                                    <div className="text-center py-10 text-slate-400 bg-white rounded border border-dashed flex flex-col items-center">
+                                        <AlertCircle className="mb-2 opacity-50" /> Keine Einträge.
+                                    </div>
+                                ) : (
+                                    filteredEntries.map(entry => (
+                                        <div key={entry.id} className="bg-white p-3 rounded shadow-sm border-l-4 border-blue-500 flex justify-between items-center">
+                                            <div>
+                                                <div className="font-bold text-slate-800 text-sm">
+                                                    {new Date(entry.date).toLocaleDateString('de-DE', {weekday:'short', day:'2-digit', month:'2-digit'})}
+                                                    <span className="ml-2 font-normal text-xs bg-slate-100 px-2 py-0.5 rounded text-slate-600">{entry.country}</span>
+                                                </div>
+                                                <div className="text-sm text-slate-600">{entry.activity}</div>
+                                                <div className="text-xs text-slate-400 mt-1 flex gap-3">
+                                                    <span className="flex items-center gap-1"><Clock size={10}/> {entry.manualDuration ? 'Manuell' : `${entry.startTime}-${entry.endTime}`}</span>
+                                                    <span className="flex items-center gap-1"><Coffee size={10}/> {entry.pause}m</span>
+                                                </div>
+                                            </div>
+                                            <div className="text-right flex items-center gap-3">
+                                                <div>
+                                                    <div className="font-bold">{entry.hours.toLocaleString('de-DE')} h</div>
+                                                    {entry.expenses > 0 && <div className="text-xs text-slate-500">{entry.expenses.toLocaleString('de-DE',{style:'currency',currency:'EUR'})}</div>}
+                                                </div>
+                                                <button onClick={()=>deleteEntry(entry.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                            {/* --- DATENVERWALTUNG --- */}
+                            <div className="border-t border-slate-200 pt-6 mt-8">
+                                <h3 className="font-bold text-slate-500 text-sm mb-3 uppercase tracking-wider">Datenverwaltung & Backup</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <button onClick={exportData} className="flex items-center justify-center gap-2 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-lg font-medium text-sm transition">
+                                        <Download size={16} /> Sicherung speichern
+                                    </button>
+                                    
+                                    <button onClick={triggerImport} className="flex items-center justify-center gap-2 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-lg font-medium text-sm transition">
+                                        <Upload size={16} /> Sicherung laden
+                                    </button>
+                                    {/* Unsichtbarer Input für Datei-Upload */}
+                                    <input 
+                                        type="file" 
+                                        accept=".json" 
+                                        ref={fileInputRef} 
+                                        onChange={importData} 
+                                        className="hidden" 
+                                    />
+                                </div>
+                                <p className="text-xs text-slate-400 mt-2 text-center">
+                                    Speichere regelmäßig eine Sicherung, um deine Daten bei Verlust des Handys zu behalten.
+                                </p>
+                            </div>
+
+                        </main>
+                    </div>
+
+                    {/* Hidden Print View */}
+                    <div className="print-only p-8 text-black bg-white max-w-4xl mx-auto">
+                        <div className="flex justify-between items-end mb-8 border-b-2 border-black pb-4">
+                            <div>
+                                <h1 className="text-2xl font-bold uppercase tracking-wide mb-1">Arbeitsbericht</h1>
+                                <p className="text-xl text-gray-600">{monthLabel}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="font-bold text-lg">{userName}'s Arbeitsbuch</p>
+                                <p className="text-sm text-gray-500">Erstellt am {new Date().toLocaleDateString('de-DE')}</p>
+                            </div>
+                        </div>
+                        <table className="w-full text-sm border-collapse">
+                            <thead>
+                                <tr className="border-b-2 border-black">
+                                    <th className="text-left py-2 font-bold w-20">Tag</th>
+                                    <th className="text-left py-2 font-bold">Tätigkeit</th>
+                                    <th className="text-left py-2 font-bold w-24">Zeit</th>
+                                    <th className="text-right py-2 font-bold w-16">Std.</th>
+                                    <th className="text-center py-2 font-bold w-16">Pause</th>
+                                    <th className="text-right py-2 font-bold w-20">Spesen</th>
+                                    <th className="text-left py-2 font-bold w-20 pl-2">Land</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {printEntries.map((e, idx) => (
+                                    <tr key={e.id} className={`border-b border-gray-200 ${idx % 2 === 0 ? 'bg-gray-50' : ''}`}>
+                                        <td className="py-2 font-medium">{new Date(e.date).toLocaleDateString('de-DE', {day: '2-digit', month:'2-digit'})}</td>
+                                        <td className="py-2">{e.activity}</td>
+                                        <td className="py-2 text-gray-600 text-xs">{e.manualDuration ? 'Manuell' : `${e.startTime}-${e.endTime}`}</td>
+                                        <td className="py-2 text-right font-bold">10,00</td>
+                                        <td className="py-2 text-center text-gray-500 text-xs">{e.pause}m</td>
+                                        <td className="py-2 text-right">{e.expenses > 0 ? e.expenses.toLocaleString('de-DE', {style:'currency', currency:'EUR'}) : '-'}</td>
+                                        <td className="py-2 pl-2 text-gray-600 text-xs">{e.country}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                             <tfoot>
+                                <tr className="border-t-2 border-black font-bold text-base bg-gray-100">
+                                    <td className="py-3 pl-2" colSpan="3">GESAMT</td>
+                                    <td className="py-3 text-right">{flatRateHours.toLocaleString('de-DE', {minimumFractionDigits: 2})} h</td>
+                                    <td className="py-3"></td>
+                                    <td className="py-3 text-right">{totalExpenses.toLocaleString('de-DE', {style:'currency', currency:'EUR'})}</td>
+                                    <td className="py-3"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                         <div className="mt-8 pt-4 border-t border-gray-300 text-sm">
+                            <div className="flex justify-between max-w-xs">
+                                <span className="text-gray-600">Abrechnung ({daysWorked} Tage à 10h):</span>
+                                <span className="font-medium">{flatRateHours} h</span>
+                            </div>
+                            <div className="flex justify-between max-w-xs mt-1">
+                                <span className="text-gray-600">Überstunden-Saldo:</span>
+                                <span className={`font-bold ${overtime >= 0 ? 'text-green-700' : 'text-red-600'}`}>{overtime > 0 ? '+' : ''}{overtime.toLocaleString('de-DE')} h</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<WorkTracker />);
+    </script>
+</body>
+</html>
+
+
